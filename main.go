@@ -1,3 +1,17 @@
+/*
+ * This file is part of qbittorrent-tools.
+
+ * qbittorrent-fixer is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software Foundation,
+ * per version 2 of the License.
+
+ * qbittorrent-tools is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+
+ * You should have received a copy of the GNU General Public License along with qbittorrent-tools. If not, see <https://www.gnu.org/licenses/>.
+ */
+
 package main
 
 import (
