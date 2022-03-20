@@ -29,136 +29,201 @@ func main() {
 		return
 	}
 
-	fixStalled(c, torrents)
-	fixForcedUpDown(c, torrents)
-	fixErrored(c, torrents)
-	fixAutoTMM(c, torrents)
-	fixChecking(c, torrents)
-	fixMoving(c, torrents)
+	cha := make([]<-chan bool, 0)
+
+	cha = append(cha, fixStalled(c, torrents))
+	cha = append(cha, fixForcedUpDown(c, torrents))
+	cha = append(cha, fixErrored(c, torrents))
+	cha = append(cha, fixAutoTMM(c, torrents))
+	cha = append(cha, fixChecking(c, torrents))
+	cha = append(cha, fixMoving(c, torrents))
+
+	for _, a := range cha { for _ = range a {}}
+
 }
 
-func fixStalled(c *qbittorrent.Client, torrents []qbittorrent.Torrent) {
-	hashes := make([]string, 0, len(torrents))
-	for _, t := range torrents {
-		if t.TotalSize == 0 || t.State != qbittorrent.TorrentStateStalledDl {
-			continue
+func fixStalled(c *qbittorrent.Client, torrents []qbittorrent.Torrent) <-chan bool {
+	ch := make(chan bool, 0)
+	go func() {
+		defer close(ch)
+		hashes := make([]string, 0, len(torrents))
+		for _, t := range torrents {
+			if t.TotalSize == 0 || t.State != qbittorrent.TorrentStateStalledDl {
+				continue
+			}
+
+			if (float64(t.AmountLeft) / float64(t.TotalSize)) > 0.1 {
+				continue
+			}
+
+			fmt.Printf("Stalled Torrent: %q\n", t.Name)
+			hashes = append(hashes, t.Hash)
 		}
 
-		if (float64(t.AmountLeft) / float64(t.TotalSize)) > 0.1 {
-			continue
+		if len(hashes) == 0 {
+			return
 		}
 
-		fmt.Printf("Stalled Torrent: %q\n", t.Name)
-		hashes = append(hashes, t.Hash)
-	}
+		if err := c.SetForceStart(hashes, true); err != nil {
+			fmt.Printf("Bad forcestart: %q\n", err)
+			return
+		}
+		
+		if err := c.Recheck(hashes); err != nil {
+			fmt.Printf("Bad recheck: %q\n", err)
+			return
+		}
+	}()
 
-	if err := c.SetForceStart(hashes, true); err != nil {
-		fmt.Printf("Bad forcestart: %q\n", err)
-		return
-	}
-	
-	if err := c.Recheck(hashes); err != nil {
-		fmt.Printf("Bad recheck: %q\n", err)
-		return
-	}
+	return ch
 }
 
-func fixForcedUpDown(c *qbittorrent.Client, torrents []qbittorrent.Torrent) {
-	hashes := make([]string, 0, len(torrents))
-	for _, t := range torrents {
-		if t.State != qbittorrent.TorrentStateForcedDl && t.State != qbittorrent.TorrentStateForcedUp {
-			continue
+func fixForcedUpDown(c *qbittorrent.Client, torrents []qbittorrent.Torrent) <-chan bool {
+	ch := make(chan bool, 0)
+	go func() {
+		defer close(ch)
+		hashes := make([]string, 0, len(torrents))
+		for _, t := range torrents {
+			if t.State != qbittorrent.TorrentStateForcedDl && t.State != qbittorrent.TorrentStateForcedUp {
+				continue
+			}
+
+			fmt.Printf("Forced UpDown Torrent: %q\n", t.Name)
+			hashes = append(hashes, t.Hash)
 		}
 
-		fmt.Printf("Forced UpDown Torrent: %q\n", t.Name)
-		hashes = append(hashes, t.Hash)
-	}
+		if len(hashes) == 0 {
+			return
+		}
 
-	if err := c.Resume(hashes); err != nil {
-		fmt.Printf("Bad resume: %q\n", err)
-		return
-	}
+		if err := c.Resume(hashes); err != nil {
+			fmt.Printf("Bad resume: %q\n", err)
+			return
+		}
+	}()
+
+	return ch
 }
 
-func fixErrored(c *qbittorrent.Client, torrents []qbittorrent.Torrent) {
-	hashes := make([]string, 0, len(torrents))
-	for _, t := range torrents {
-		if t.State != qbittorrent.TorrentStateError {
-			continue
+func fixErrored(c *qbittorrent.Client, torrents []qbittorrent.Torrent) <-chan bool {
+	ch := make(chan bool, 0)
+	go func() {
+		defer close(ch)
+		hashes := make([]string, 0, len(torrents))
+		for _, t := range torrents {
+			if t.State != qbittorrent.TorrentStateError {
+				continue
+			}
+
+			fmt.Printf("Errored Torrent: %q\n", t.Name)
+			hashes = append(hashes, t.Hash)
 		}
 
-		fmt.Printf("Errored Torrent: %q\n", t.Name)
-		hashes = append(hashes, t.Hash)
-	}
+		if len(hashes) == 0 {
+			return
+		}
 
-	if err := c.Resume(hashes); err != nil {
-		fmt.Printf("Bad resume: %q\n", err)
-		return
-	}
+		if err := c.Resume(hashes); err != nil {
+			fmt.Printf("Bad resume: %q\n", err)
+			return
+		}
 
-	if err := c.SetForceStart(hashes, true); err != nil {
-		fmt.Printf("Bad resume: %q\n", err)
-		return
-	}
+		if err := c.SetForceStart(hashes, true); err != nil {
+			fmt.Printf("Bad Forcestart: %q\n", err)
+			return
+		}
+	}()
+
+	return ch
 }
 
-func fixAutoTMM(c *qbittorrent.Client, torrents []qbittorrent.Torrent) {
-	hashes := make([]string, 0, len(torrents))
-	for _, t := range torrents {
-		if t.AutoManaged == true {
-			continue
+func fixAutoTMM(c *qbittorrent.Client, torrents []qbittorrent.Torrent) <-chan bool {
+	ch := make(chan bool, 0)
+	go func() {
+		defer close(ch)
+		hashes := make([]string, 0, len(torrents))
+		for _, t := range torrents {
+			if t.AutoManaged == true {
+				continue
+			}
+
+			fmt.Printf("AutoManaged Torrent: %q\n", t.Name)
+			hashes = append(hashes, t.Hash)
 		}
 
-		fmt.Printf("AutoManaged Torrent: %q\n", t.Name)
-		hashes = append(hashes, t.Hash)
-	}
+		if len(hashes) == 0 {
+			return
+		}
 
-	if err := c.SetAutoManagement(hashes, true); err != nil {
-		fmt.Printf("Bad Management: %q\n", err)
-		return
-	}
+		if err := c.SetAutoManagement(hashes, true); err != nil {
+			fmt.Printf("Bad Management: %q\n", err)
+			return
+		}
+	}()
+
+	return ch
 }
 
-func fixChecking(c *qbittorrent.Client, torrents []qbittorrent.Torrent) {
-	hashes := make([]string, 0, len(torrents))
-	for _, t := range torrents {
-		if t.State != qbittorrent.TorrentStateCheckingUp && t.State != qbittorrent.TorrentStateCheckingDl {
-			continue
+func fixChecking(c *qbittorrent.Client, torrents []qbittorrent.Torrent) <-chan bool {
+	ch := make(chan bool, 0)
+	go func() {
+		defer close(ch)
+		hashes := make([]string, 0, len(torrents))
+		for _, t := range torrents {
+			if t.State != qbittorrent.TorrentStateCheckingUp && t.State != qbittorrent.TorrentStateCheckingDl {
+				continue
+			}
+
+			fmt.Printf("Checking Torrent: %q\n", t.Name)
+			hashes = append(hashes, t.Hash)
 		}
 
-		fmt.Printf("Checking Torrent: %q\n", t.Name)
-		hashes = append(hashes, t.Hash)
-	}
+		if len(hashes) == 0 {
+			return
+		}
 
-	if err := c.Resume(hashes); err != nil {
-		fmt.Printf("Bad resume: %q\n", err)
-		return
-	}
+		if err := c.Resume(hashes); err != nil {
+			fmt.Printf("Bad resume: %q\n", err)
+			return
+		}
 
-	if err := c.SetForceStart(hashes, true); err != nil {
-		fmt.Printf("Bad forcestart: %q\n", err)
-		return
-	}
+		if err := c.SetForceStart(hashes, true); err != nil {
+			fmt.Printf("Bad forcestart: %q\n", err)
+			return
+		}
+	}()
+
+	return ch
 }
 
-func fixMoving(c *qbittorrent.Client, torrents []qbittorrent.Torrent) {
-	hashes := make([]string, 0, len(torrents))
-	for _, t := range torrents {
-		if t.State != qbittorrent.TorrentStateMoving {
-			continue
+func fixMoving(c *qbittorrent.Client, torrents []qbittorrent.Torrent) <-chan bool {
+	ch := make(chan bool, 0)
+	go func() {
+		defer close(ch)
+		hashes := make([]string, 0, len(torrents))
+		for _, t := range torrents {
+			if t.State != qbittorrent.TorrentStateMoving {
+				continue
+			}
+
+			fmt.Printf("Moving Torrent: %q\n", t.Name)
+			hashes = append(hashes, t.Hash)
 		}
 
-		fmt.Printf("Moving Torrent: %q\n", t.Name)
-		hashes = append(hashes, t.Hash)
-	}
+		if len(hashes) == 0 {
+			return
+		}
 
-	if err := c.Resume(hashes); err != nil {
-		fmt.Printf("Bad resume: %q\n", err)
-		return
-	}
+		if err := c.Resume(hashes); err != nil {
+			fmt.Printf("Bad resume: %q\n", err)
+			return
+		}
 
-	if err := c.SetForceStart(hashes, true); err != nil {
-		fmt.Printf("Bad forcestart: %q\n", err)
-		return
-	}
+		if err := c.SetForceStart(hashes, true); err != nil {
+			fmt.Printf("Bad forcestart: %q\n", err)
+			return
+		}
+	}()
+
+	return ch
 }
